@@ -77,9 +77,12 @@ def zipFiles(srcFolder,name):
 
 
 def judgeDetailImage(fileName : str):
+    ## 详情或参数图
     if('详情' in fileName or '参数' in fileName):
         return True
     
+    
+    ## _3 图
     if(len(fileName.split('_')) > 1):
         mid = fileName.split('_')[1]
         
@@ -108,22 +111,59 @@ def imagesOrderReplace(_code : str , filePath : str):
     
     _temp = []
     
+    ## 正面主图
     for file in os.listdir(filePath):
         if(_code + '_2' in file) :
             _temp.append(file)
+            
+    ## 侧面主图
+    for file in os.listdir(filePath):
+        if(_code + '_1' in file) :
+            _temp.append(file)
+    
+    ## 模特图
             
     for file in os.listdir(filePath):
         if('模特' in file) :
             _temp.append(file)
     
+    ## 其他买家秀
     for file in os.listdir(filePath):
         if(not file in _temp):
             _temp.append(file)
             
+    ## 重命名带有 code
     ## Rename to change order 
     for i in range(len(_temp)) : 
-        subprocess.Popen('mv %s %s' %(filePath + '/' + _temp[i] , filePath + '/' + str(i+1) + '.' + _temp[i].split('.')[-1] ) , shell = True)
+        subprocess.Popen('mv %s %s' %(filePath + '/' + _temp[i] , filePath + '/' + _code + '_' + str(i+1) + '.' + _temp[i].split('.')[-1] ) , shell = True)
     # print('    ---- Image Reorder Successfully')
+
+def detailImageOrderReplace(_code : str , filePath : str):
+    _temp = []
+    
+    ## 参数
+    for file in os.listdir(filePath):
+        if('参数' in file):
+            _temp.append(file)
+            
+    ## _3x
+    
+    for file in os.listdir(filePath):
+        if(_code + '_3' in file):
+            _temp.append(file)
+
+    ## 详情页
+    for file in os.listdir(filePath):
+        if('详情' in file):
+            _temp.append(file)
+            
+        
+    ## 重命名带有 code
+    ## Rename to change order 
+    for i in range(len(_temp)) : 
+        subprocess.Popen('mv %s %s' %(filePath + '/' + _temp[i] , filePath + '/' + _code + '_detail_' + str(i+1) + '.' + _temp[i].split('.')[-1] ) , shell = True)
+            
+            
 
 def copyImageFolderToDes(srcPath):
     ## example : cp -r ../8301/8301 /Processed/pics/
@@ -154,6 +194,9 @@ def copyImageFolderToDes(srcPath):
                     
     ## Order the images in main image folder
     imagesOrderReplace(_code , _uploadImageFolder)
+    
+    ## Order the images in detail folder
+    detailImageOrderReplace(_code , _detailImageFolder)
     
     
     command  = 'cp -r %s %s'%(_uploadImageFolder , outputImageFolder)
@@ -313,4 +356,4 @@ def run(srcPath , sheetName , clean : bool = 'False'):
     print('fail processes : ', failed_proc)
     # print(_priceList)
             
-run(srcFile,'鹏光', False)
+run(srcFile,'鹏光',  False)
