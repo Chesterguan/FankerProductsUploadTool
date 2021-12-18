@@ -22,7 +22,8 @@ from docx.enum.text import WD_ALIGN_PARAGRAPH
 
 
 
-productColumns = ['产品名称', '产品图片','商城价','库存量','编号','类型','规格','材质','颜色','品牌','型号','市场价','详情介绍', '分类名称', '标签' ]
+productColumns = ['产品名称', '产品图片','商城价','库存量','编号','类型','材质','颜色','性别','价格','重量','镜片宽','镜总宽','镜片高','鼻间距','镜腿长','库存量','详情介绍', '分类名称', '标签' ]
+
 
 defaultPrices = {
     
@@ -30,18 +31,21 @@ defaultPrices = {
     '1.60' : '90',
     '1.67' : '160',
     '1.74' : '450',
-    '非球面':'0',
+    '非球面': '0',
     '防蓝光' : '50',
-    '变色' : '150',
-    '防蓝光变色':'200',
-    '偏光' : '300',
+    '变灰色': '150',
+    '变茶色': '200', 
+    '防蓝光变灰色': '200',
+    '防蓝光变茶色': '250',
+    '偏光灰' : '300',
+    '偏光绿' : '300',
+    '偏光茶' : '300',
     'other':' 175'
-    
     }
 
 srcFile = '/Users/ziyuanguan/易看-eyecare/零售销售计划/记账.xlsx'
 sheetNames = ['鹏光','盛悦']    
-sourceDefaultColumns = ['编号','颜色','材质','进货价格','性别','特色'] #'进货数量'
+sourceDefaultColumns = ['编号','颜色','材质','进货价格','性别','名称','重量','镜片宽','镜总宽','镜片高','鼻间距','镜腿长'] #'进货数量'
 
 
 inputImagesBase = '../../产品/正式/'
@@ -55,6 +59,7 @@ outputDetailsFolder = outputBase + 'details/'
 outputFolders = [outputImageFolder ,  outputDetailsFolder]
 
 sizeLimit = 1.2 # GB
+emphsizedCodes = ['8303']
 
 failed_proc = []
 
@@ -107,18 +112,24 @@ def cleanCache(path , code):
     proc = subprocess.Popen(command , shell = True)
     
 
-def imagesOrderReplace(_code : str , filePath : str):
+def imagesOrderReplace(_code : str , filePath : str , flag:bool = True):
     
     _temp = []
     
+    order = [2 , 1]
+    
+    if(flag):
+        ## 正面主图 侧面主图 分别为 _1 _2, 否则反之
+        for i in range(len(order)):
+            order[i] = 3 - order[i]
     ## 正面主图
     for file in os.listdir(filePath):
-        if(_code + '_2' in file) :
+        if(_code + '_' + str(order[0]) in file) :
             _temp.append(file)
             
     ## 侧面主图
     for file in os.listdir(filePath):
-        if(_code + '_1' in file) :
+        if(_code + '_' + str(order[1]) in file) :
             _temp.append(file)
     
     ## 模特图
@@ -252,20 +263,38 @@ def getTypes(row):
         
     return _matypes+'、近视镜架'
   
+
+def convertToBetterDigital(src : str):
+    
+    lastDigit = src[-1]
+    if(lastDigit < '3'):
+        return src[:-1] + '0'
+    
+    if(lastDigit >= '3' and lastDigit < '6'):
+        return src[:-1] + '6'
+    
+    if(lastDigit > '6'):
+        return src[:-1] + '8'
+    
+    return src
+
 def generatePriceList( _code : str, price: str):
     
     price = int(price)
+    ##强推款 再涨价 20%
+    if(_code in emphsizedCodes):
+        price = int(1.2 * price)
     _prices = {}
     _indexs = ['1.56','1.60','1.67','1.74']
-    _services = ['非球面','防蓝光','变色','防蓝光变色','偏光']
+    
+    _services = ['非球面','防蓝光','变灰色','变茶色','防蓝光变灰色','防蓝光变茶色','偏光灰','偏光绿','偏光茶']
     _prices['编号'] = _code
     for index in _indexs:
         for service in _services:
-            if(index == '1.74' and service == '偏光' ):
+            if(index == '1.74' and '偏光' in service ):
                 continue
             else:
-                _prices[index + service] = price + int(defaultPrices[index]) + int(defaultPrices[service])
-    
+                _prices[index + service] = convertToBetterDigital(str(price + int(defaultPrices[index]) + int(defaultPrices[service])))
     
     _prices = pd.DataFrame(_prices, index = [0] )
     
@@ -273,9 +302,11 @@ def generatePriceList( _code : str, price: str):
     return _prices
     
 
-def generateProductName(row):
+def generateProductName(row, flag:bool= True):
+    
+    
     sex = row['性别']
-    name = row['特色']
+    name = row['名称']
     code = row['编号']
     ## 中文符号
     sexes = sex.split('+')
@@ -284,28 +315,40 @@ def generateProductName(row):
         _sex = '男女通用'
     else:
         _sex = sex + '式'
-        
+    
+    ## if "盛悦" no need to process
+    if(flag):
+        return name
     return name + ' ' + _sex + ' ' + code
 
+
+def processSex(src : str ):
+    if(src == '女'):
+        return '女式'
+    if(src == '男'):
+        return '男式'
+    return '男女通用'
   
         
 def readExcel(srcPath , sheetName):
-    data = pd.read_excel(srcPath , sheet_name = sheetName, usecols=sourceDefaultColumns).fillna(method= 'pad')
+    data = pd.read_excel(srcPath , sheet_name = sheetName, usecols=sourceDefaultColumns , dtype=str).fillna(method= 'pad')
     data['编号'] = data['编号'].astype('str')
     ## 物流 100， 75 直接加入 镜架价格
-    data['进货价格'] = data['进货价格'].map(lambda x : str(3 * int(x) + 75))
+    data['进货价格'] = data['进货价格'].map(lambda x : str(int(3.33 * int(x)) + 75))
     new_data = data.groupby(['编号'],as_index=False).agg(joinValues)
     new_data['产品名称'] = new_data.apply(lambda x : generateProductName(x) , axis = 1)
     new_data['产品图片'] = new_data['编号'].map(lambda x : str(x))
     new_data['详情介绍'] = new_data['编号'].map(lambda x : str(x) + '.docx')
     new_data['分类名称'] = new_data.apply(lambda x : getTypes(x) , axis = 1)
     new_data['商城价'] = new_data['进货价格']
-    new_data['规格'] = ''
-    new_data['品牌'] = sheetName
+    #new_data['规格'] = ''
+    #new_data['品牌'] = sheetName
     new_data['型号'] = new_data['编号']
     new_data['库存量'] = 200
     new_data['类型'] = '近视镜架'
     new_data['标签'] = '最新'
+    new_data['价格'] = new_data['进货价格']
+    new_data['性别'] = new_data['性别'].map(lambda x : processSex(x))
     new_data.rename(columns = {'进货价格':'市场价'}, inplace=True)
     
     ## reorganize the columns orders
@@ -329,6 +372,7 @@ def run(srcPath , sheetName , clean : bool = 'False'):
             os.makedirs(folder)
     
     productsInfo = readExcel(srcPath , sheetName)
+    print(productsInfo)
     outputListPath = outputBase + 'list.xlsx'
     productsInfo.to_excel(outputListPath, header = True , index = False)
     
@@ -341,19 +385,19 @@ def run(srcPath , sheetName , clean : bool = 'False'):
         if(clean):
             cleanCache(path=inputImagesBase + sheetName + '/' + _code ,  code = _code)
         else:
-            ## copy images
+            # copy images
             copyImageFolderToDes(inputImagesBase + sheetName + '/' + _code)
-            # ## create detail file
+            ## create detail file
             createDetailFile(_code , inputImagesBase + sheetName + '/' + _code)
-            ## generate price list 
-            _tempPrice = generatePriceList(_code, productsInfo.loc[productsInfo['编号'] == _code]['市场价'].values[0])
+            # generate price list 
+            _tempPrice = generatePriceList(_code, productsInfo.loc[productsInfo['编号'] == _code]['价格'].values[0])
             _priceList = _priceList.append(_tempPrice)
             
-    _priceList.to_csv('../../Processed/' + 'priceList.csv', index=False)
+    _priceList.to_csv('../../Processed/' + 'priceList' + sheetName + '.csv', index=False)
     ## zip files
     # zipFiles(outputBase , date)
                
     print('fail processes : ', failed_proc)
     # print(_priceList)
             
-run(srcFile,'鹏光',  False)
+run(srcFile,'盛悦', False)
